@@ -1,599 +1,292 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Play, Plus, Star, X, Search, 
-  Heart, PlayCircle, Sparkles, 
-  ChevronRight, ChevronLeft, Home, Compass, Check
-} from 'lucide-react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
+import React, { useState, useEffect } from 'react';
+import { Home, Compass, Search, Bookmark, Sparkles, Play, Plus, Check, X, ChevronRight } from 'lucide-react';
 
-// --- CLOUD STORAGE & AUTH SETUP ---
-const getFirebaseInit = () => {
-  try {
-    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-    if (!firebaseConfig) return { app: null, auth: null, db: null, appId: 'local' };
-    
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-    return { app, auth, db, appId };
-  } catch (e) {
-    console.error("Firebase init error:", e);
-    return { app: null, auth: null, db: null, appId: 'local' };
-  }
-};
-const { app, auth, db, appId } = getFirebaseInit();
-
-// --- TMDB API CONFIGURATION ---
-// ⚠️ VERCEL INSTRUCTION:
-// Change the empty string below to: import.meta.env.VITE_TMDB_API_KEY
-// (It is left empty here so the preview canvas parser does not crash)
+// --- CONFIGURATION ---
+// Vercel will inject your API key here from your Environment Variables.
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || ""; 
 const BASE_URL = "https://api.themoviedb.org/3";
-const IMG_BASE = "https://image.tmdb.org/t/p/original";
-const IMG_BASE_SM = "https://image.tmdb.org/t/p/w500";
+const IMAGE_BASE = "https://image.tmdb.org/t/p/original";
 
-// --- FALLBACK MOCK DATA ---
-const FALLBACK_DATA = {
-  trending: [
-    { id: 1, title: "Dune: Part Two", backdrop_path: "/8rpDcsfLJypbO6vtecwmH3X32nd.jpg", poster_path: "/1pdfLvkbY9ohJlCjQH2TGbiOoAc.jpg", vote_average: 8.3, release_date: "2024-02-27", overview: "Paul Atreides unites with Chani and the Fremen while on a warpath of revenge against the conspirators who destroyed his family." },
-    { id: 2, title: "Poor Things", backdrop_path: "/kCGlIMHnOm8PhbO32yqELfElw0X.jpg", poster_path: "/kCGlIMHnOm8PhbO32yqELfElw0X.jpg", vote_average: 7.9, release_date: "2023-12-07", overview: "Brought back to life by an unorthodox scientist, a young woman runs off with a debauched lawyer on a whirlwind adventure across the continents." },
-    { id: 3, title: "Oppenheimer", backdrop_path: "/fm6KqXpk3M2HVveHwCrBRoOoA0i.jpg", poster_path: "/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg", vote_average: 8.1, release_date: "2023-07-19", overview: "The story of J. Robert Oppenheimer's role in the development of the atomic bomb during World War II." },
-    { id: 4, title: "Spider-Man: Across the Spider-Verse", backdrop_path: "/4HodYYKEIsGOdinkGi2Ucz6X9i0.jpg", poster_path: "/8Vt6mWEReuy4Of61Lnj5Xj704m8.jpg", vote_average: 8.4, release_date: "2023-05-31", overview: "Miles Morales catapults across the Multiverse, where he encounters a team of Spider-People charged with protecting its very existence." },
-    { id: 5, title: "The Batman", backdrop_path: "/b0PlSFdSmBgZZqglk1WpBnd78zE.jpg", poster_path: "/74xTEgt7R36Fpooo50r9T25onhq.jpg", vote_average: 7.7, release_date: "2022-03-01", overview: "In his second year of fighting crime, Batman uncovers corruption in Gotham City that connects to his own family while facing a serial killer known as the Riddler." },
-  ],
-  action: [
-    { id: 6, title: "John Wick: Chapter 4", backdrop_path: "/vI3aJMj8RucWHvJZLMMfGDjH31s.jpg", poster_path: "/vZloFAK7NmvMGKE7VkF5UHaz0I.jpg", vote_average: 7.8, release_date: "2023-03-22", overview: "With the price on his head ever increasing, John Wick uncovers a path to defeating The High Table." },
-    { id: 7, title: "Mad Max: Fury Road", backdrop_path: "/nlCHUWjY9XWbuEUQauCBgnY8ymF.jpg", poster_path: "/8tZYtuWezp8JbcsvHYO0O46tFbo.jpg", vote_average: 7.6, release_date: "2015-05-13", overview: "An apocalyptic story set in the furthest reaches of our planet, in a stark desert landscape where humanity is broken." },
-    { id: 8, title: "Mission: Impossible - Dead Reckoning", backdrop_path: "/cwKUydpeeaJjyGtP9mNlZc0wHk1.jpg", poster_path: "/NNxYkU70HPurnNCSiCjYAmacwm.jpg", vote_average: 7.6, release_date: "2023-07-08", overview: "Ethan Hunt and his IMF team embark on their most dangerous mission yet." },
-  ],
-  scifi: [
-    { id: 11, title: "Blade Runner 2049", backdrop_path: "/ilRyazdflIgEqbXIQs1zEGE1q0w.jpg", poster_path: "/gajva2L0rIGDWE4SyB6RoIG8ISS.jpg", vote_average: 7.6, release_date: "2017-10-04", overview: "Thirty years after the events of the first film, a new blade runner, LAPD Officer K, unearths a long-buried secret." },
-    { id: 12, title: "Interstellar", backdrop_path: "/xJHokMbljvjX5LSWorthIN4219.jpg", poster_path: "/gEU2QlsUUHX4wk5EheA6yVhe21b.jpg", vote_average: 8.4, release_date: "2014-11-05", overview: "The adventures of a group of explorers who make use of a newly discovered wormhole to surpass the limitations on human space travel." },
-    { id: 13, title: "Arrival", backdrop_path: "/xT98tLqatZPQApyRmlLCENDemiJ.jpg", poster_path: "/pEzxhe6Z6xXzC830x10f78KzGk7.jpg", vote_average: 7.3, release_date: "2016-11-10", overview: "Taking place after alien crafts land around the world, an expert linguist is recruited by the military to determine whether they come in peace or are a threat." },
-  ]
-};
-
-// --- REUSABLE COMPONENTS ---
-
-const FilmGrain = () => (
-  <div 
-    className="pointer-events-none fixed inset-0 z-50 h-full w-full opacity-[0.15] mix-blend-overlay"
-    style={{ 
-      backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' 
-    }}
-  />
-);
-
-// Extracted for consistency across all views
-const MovieItem = ({ movie, onSelect, layout = 'row' }) => (
-  <div className={`relative ${layout === 'row' ? 'w-[140px] md:w-[200px] snap-start flex-none' : 'w-full'} group/item cursor-pointer`}>
-    <div 
-      onClick={() => onSelect(movie)}
-      className="w-full aspect-[2/3] rounded-xl overflow-hidden bg-[#111] mb-3 relative shadow-lg ring-1 ring-white/5 transition-all duration-500 ease-out group-hover/item:ring-white/20 group-hover/item:shadow-[0_20px_40px_rgba(0,0,0,0.6)] group-hover/item:-translate-y-2 active:scale-[0.97]"
-    >
-      <img 
-        src={`${IMG_BASE_SM}${movie.poster_path}`} 
-        alt={movie.title}
-        onError={(e) => { e.target.src = "https://via.placeholder.com/500x750/111/fff?text=" + encodeURIComponent(movie.title) }}
-        className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover/item:scale-110"
-      />
-      <div className="absolute inset-0 bg-black/0 group-hover/item:bg-black/30 backdrop-blur-[0px] group-hover/item:backdrop-blur-[2px] transition-all duration-500 ease-out flex items-center justify-center">
-        <PlayCircle className="w-12 h-12 text-white opacity-0 group-hover/item:opacity-100 transform scale-50 group-hover/item:scale-100 transition-all duration-500 ease-out drop-shadow-2xl" strokeWidth={1.5} />
-      </div>
-    </div>
-    
-    <div className="px-1 transition-transform duration-500 ease-out group-hover/item:translate-x-1">
-      <h4 className="font-semibold text-white/90 text-sm md:text-base leading-snug truncate group-hover/item:text-white transition-colors">
-        {movie.title}
-      </h4>
-      <div className="flex items-center gap-2 mt-1 text-xs font-medium text-white/40 group-hover/item:text-white/60 transition-colors">
-        <span>{movie.release_date?.substring(0, 4)}</span>
-        <span>•</span>
-        <div className="flex items-center gap-1">
-          <Star className="w-3 h-3 fill-current text-white/60" />
-          <span>{movie.vote_average?.toFixed(1) || 'N/A'}</span>
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
-const MovieRow = ({ title, movies, onSelect, isSpecial = false }) => {
-  const scrollRef = useRef(null);
-
-  const scroll = (direction) => {
-    if (scrollRef.current) {
-      const { scrollLeft, clientWidth } = scrollRef.current;
-      const scrollTo = direction === 'left' ? scrollLeft - clientWidth + 200 : scrollLeft + clientWidth - 200;
-      scrollRef.current.scrollTo({ left: scrollTo, behavior: 'smooth' });
-    }
-  };
-
-  if (!movies || movies.length === 0) return null;
-
-  return (
-    <div className={`mb-12 md:mb-20 relative group/row ${isSpecial ? 'bg-white/5 py-10 border-y border-white/5 backdrop-blur-md' : ''}`}>
-      <div className="px-6 md:px-16 flex items-end justify-between mb-6">
-        <h3 className="text-xl md:text-2xl font-semibold tracking-tight text-white/90 flex items-center gap-2">
-          {isSpecial && <Heart className="w-5 h-5 text-emerald-400 fill-current" />}
-          {title}
-        </h3>
-        {!isSpecial && (
-          <button className="text-sm font-medium text-white/40 hover:text-white transition-colors flex items-center gap-1">
-            Explore <ChevronRight className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-      
-      <div className="relative">
-        <button 
-          onClick={() => scroll('left')}
-          className={`absolute left-0 top-0 bottom-12 z-20 w-16 opacity-0 group-hover/row:opacity-100 transition-opacity duration-500 flex items-center justify-start pl-4 ${isSpecial ? 'bg-gradient-to-r from-[#111] to-transparent' : 'bg-gradient-to-r from-black via-black/80 to-transparent'}`}
-        >
-          <ChevronLeft className="w-8 h-8 text-white drop-shadow-2xl hover:scale-110 transition-transform" />
-        </button>
-        
-        <button 
-          onClick={() => scroll('right')}
-          className={`absolute right-0 top-0 bottom-12 z-20 w-16 opacity-0 group-hover/row:opacity-100 transition-opacity duration-500 flex items-center justify-end pr-4 ${isSpecial ? 'bg-gradient-to-l from-[#111] to-transparent' : 'bg-gradient-to-l from-black via-black/80 to-transparent'}`}
-        >
-          <ChevronRight className="w-8 h-8 text-white drop-shadow-2xl hover:scale-110 transition-transform" />
-        </button>
-
-        <div ref={scrollRef} className="flex gap-4 md:gap-6 overflow-x-auto snap-x snap-mandatory hide-scrollbar px-6 md:px-16 pb-12 pt-4">
-          {movies.map((movie) => (
-            <MovieItem key={movie.id} movie={movie} onSelect={onSelect} layout="row" />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-
-// --- VIEW LAYOUTS ---
-
-const HomeView = ({ featured, data, vault, onSelect, toggleVault, isFeaturedInVault }) => (
-  <>
-    {featured && (
-      <header className="relative w-full h-[80vh] min-h-[650px] md:h-[90vh] flex items-end pb-32 pt-32">
-        <div className="absolute inset-0 z-0 overflow-hidden bg-[#0a0a0a]">
-          <img 
-            src={`${IMG_BASE}${featured.backdrop_path}`} 
-            alt={featured.title}
-            onError={(e) => { e.target.src = "https://image.tmdb.org/t/p/original/8rpDcsfLJypbO6vtecwmH3X32nd.jpg" }}
-            className="w-full h-full object-cover opacity-80 animate-[slowPan_40s_ease-in-out_infinite_alternate]"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/20 to-transparent" />
-        </div>
-
-        <div className="container mx-auto px-6 md:px-16 relative z-10">
-          <div className="max-w-3xl">
-            <h1 className="text-5xl md:text-7xl lg:text-[5.5rem] font-bold tracking-tighter mb-4 text-white leading-[1.05]">
-              {featured.title}
-            </h1>
-            
-            <div className="flex items-center gap-4 mb-6 text-sm font-semibold tracking-wide text-white/60">
-              <span>{featured.release_date?.substring(0, 4)}</span>
-              <span className="w-1 h-1 rounded-full bg-white/30" />
-              <span>Feature Film</span>
-              <span className="w-1 h-1 rounded-full bg-white/30" />
-              <div className="flex items-center gap-1">
-                <Star className="w-4 h-4 text-white fill-current" />
-                <span>{featured.vote_average?.toFixed(1)}</span>
-              </div>
-            </div>
-
-            <p className="text-lg md:text-xl text-white/70 font-medium mb-10 leading-relaxed max-w-2xl line-clamp-3 md:line-clamp-none">
-              {featured.overview}
-            </p>
-
-            <div className="flex flex-wrap items-center gap-4">
-              <button 
-                onClick={() => onSelect(featured)}
-                className="flex items-center gap-3 bg-white text-black px-8 py-4 rounded-full font-bold tracking-tight transition-all hover:scale-105 hover:bg-neutral-200"
-              >
-                <Play className="w-5 h-5 fill-current" />
-                <span>Play Trailer</span>
-              </button>
-              <button 
-                onClick={() => toggleVault(featured)}
-                className={`flex items-center gap-3 backdrop-blur-xl border px-8 py-4 rounded-full font-semibold tracking-tight transition-all active:scale-95 ${
-                  isFeaturedInVault 
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' 
-                    : 'bg-white/10 border-white/10 text-white hover:bg-white/20'
-                }`}
-              >
-                {isFeaturedInVault ? <Check className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                <span>{isFeaturedInVault ? "In Your Vault" : "Add to Vault"}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-    )}
-
-    <section className="relative z-10 -mt-8 pb-32">
-      {vault.length > 0 && <MovieRow title="Your Personal Vault" movies={vault} onSelect={onSelect} isSpecial={true} />}
-      <MovieRow title="The Global Zeitgeist" movies={data.trending} onSelect={onSelect} />
-      <MovieRow title="Kinetic Cinema" movies={data.action} onSelect={onSelect} />
-      <MovieRow title="Visions of Tomorrow" movies={data.scifi} onSelect={onSelect} />
-    </section>
-  </>
-);
-
-const ExploreView = ({ data, onSelect }) => {
-  // Combine all data and remove duplicates based on movie ID
-  const allMovies = [...data.trending, ...data.action, ...data.scifi].filter((v,i,a)=>a.findIndex(v2=>(v2.id===v.id))===i);
-  
-  return (
-    <div className="pt-32 pb-40 px-6 md:px-16 min-h-screen">
-      <div className="flex items-center gap-3 mb-10">
-        <Compass className="w-8 h-8 text-white/50" />
-        <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-white">Explore</h2>
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-10 md:gap-x-6 md:gap-y-12">
-        {allMovies.map(movie => <MovieItem key={movie.id} movie={movie} onSelect={onSelect} layout="grid" />)}
-      </div>
-    </div>
-  );
-};
-
-const SearchView = ({ data, onSelect }) => {
-  const [query, setQuery] = useState('');
-  const allMovies = [...data.trending, ...data.action, ...data.scifi].filter((v,i,a)=>a.findIndex(v2=>(v2.id===v.id))===i);
-  const filtered = allMovies.filter(m => m.title.toLowerCase().includes(query.toLowerCase()));
-  
-  return (
-    <div className="pt-32 pb-40 px-6 md:px-16 min-h-screen flex flex-col items-center">
-      <div className="w-full max-w-4xl relative mb-16 animate-in slide-in-from-top-4 duration-500">
-         <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-7 h-7 text-white/40" />
-         <input 
-           autoFocus 
-           placeholder="Search titles, directors, or genres..." 
-           value={query} 
-           onChange={e => setQuery(e.target.value)} 
-           className="w-full bg-white/5 backdrop-blur-xl border border-white/10 rounded-full py-6 pl-20 pr-8 text-xl md:text-2xl font-medium text-white outline-none focus:border-white/40 focus:bg-white/10 transition-all shadow-2xl" 
-         />
-      </div>
-
-      {query && filtered.length === 0 ? (
-        <div className="text-center text-white/40 mt-12">
-          <p className="text-2xl font-medium">No results found for "{query}"</p>
-          <p className="mt-2 text-sm">Try asking the Aura Engine to find something similar.</p>
-        </div>
-      ) : (
-        <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-10 md:gap-x-6 md:gap-y-12">
-          {filtered.map(movie => <MovieItem key={movie.id} movie={movie} onSelect={onSelect} layout="grid" />)}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const VaultView = ({ vault, onSelect }) => (
-  <div className="pt-32 pb-40 px-6 md:px-16 min-h-screen">
-    <div className="flex items-center justify-between mb-10 border-b border-white/10 pb-6">
-      <div className="flex items-center gap-3">
-        <Heart className="w-8 h-8 text-emerald-400 fill-current" />
-        <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-white">Your Vault</h2>
-      </div>
-      <span className="text-white/40 font-medium">{vault.length} Titles Saved</span>
-    </div>
-    
-    {vault.length === 0 ? (
-      <div className="flex flex-col items-center justify-center h-[40vh] text-center">
-        <Heart className="w-16 h-16 text-white/10 mb-4" />
-        <p className="text-2xl font-semibold text-white/50 mb-2">Your vault is empty</p>
-        <p className="text-white/30 max-w-md">Films and series you add to your vault will appear here for easy access across all your devices.</p>
-      </div>
-    ) : (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-10 md:gap-x-6 md:gap-y-12">
-        {vault.map(movie => <MovieItem key={movie.id} movie={movie} onSelect={onSelect} layout="grid" />)}
-      </div>
-    )}
-  </div>
-);
-
-// --- MAIN APP ---
+// --- FALLBACK DATA ---
+// Used if the API key is missing or fails to load.
+const MOCK_MOVIES = [
+  { id: 1, title: "Dune: Part Two", backdrop_path: "/xOMo8BRK7PfcJv9JCnx7s5hj0PX.jpg", poster_path: "/1pdfLvkbY9ohJlCjQH2JGjjcNsV.jpg", release_date: "2024-02-27", vote_average: 8.3, overview: "Paul Atreides unites with Chani and the Fremen while on a warpath of revenge against the conspirators who destroyed his family." },
+  { id: 2, title: "Civil War", backdrop_path: "/5zmiBoMzeeVdQ62no55JOJMY498.jpg", poster_path: "/sh7Rg8Er3tFcN9BpKIPOMvALgZd.jpg", release_date: "2024-04-10", vote_average: 7.4, overview: "In a dystopian future America, a team of military-embedded journalists takes a risky journey to Washington, D.C., to interview the president." },
+  { id: 3, title: "Challengers", backdrop_path: "/tpiqEVTLRz2Mq7eLq5DT8jSpmXT.jpg", poster_path: "/H6vke7zGtzMicnfTotGOkKKTcg.jpg", release_date: "2024-04-18", vote_average: 7.3, overview: "Tennis player turned coach Tashi has taken her husband, Art, and transformed him into a world-famous grand slam champion." },
+  { id: 4, title: "Furiosa: A Mad Max Saga", backdrop_path: "/xvdNIYqWQ0CYAms9O3nU71IinK4.jpg", poster_path: "/iADOJ8Zymht2JPMoy3R7xceZprc.jpg", release_date: "2024-05-22", vote_average: 7.6, overview: "As the world fell, young Furiosa is snatched from the Green Place of Many Mothers and falls into the hands of a great Biker Horde." },
+  { id: 5, title: "Oppenheimer", backdrop_path: "/fm6KqXpk3M2HVveHwCrBRoOoA0i.jpg", poster_path: "/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg", release_date: "2023-07-19", vote_average: 8.1, overview: "The story of J. Robert Oppenheimer's role in the development of the atomic bomb during World War II." }
+];
 
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [activeTab, setActiveTab] = useState('home');
+  const [isAuraOpen, setIsAuraOpen] = useState(false);
+  const [movies, setMovies] = useState({
+    trending: MOCK_MOVIES,
+    action: MOCK_MOVIES,
+    scifi: MOCK_MOVIES
+  });
   const [vault, setVault] = useState([]);
-  
-  const [data, setData] = useState({ trending: [], action: [], scifi: [] });
-  const [featured, setFeatured] = useState(null);
-  const [activeMovie, setActiveMovie] = useState(null);
-  const [aiModalOpen, setAiModalOpen] = useState(false);
-  const [promptQuery, setPromptQuery] = useState("");
-  const [activeTab, setActiveTab] = useState('home'); // Controls the main view!
 
-  // --- CLOUD AUTHENTICATION ---
+  // Fetch from TMDB if API key exists
   useEffect(() => {
-    if (!auth) return;
-    const initAuth = async () => {
+    if (!TMDB_API_KEY) return;
+
+    const fetchMovies = async (endpoint) => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (e) {
-        console.error("Auth error:", e);
-      }
-    };
-    initAuth();
-    
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
-  }, []);
-
-  // --- VAULT (MY LIST) SYNCING ---
-  useEffect(() => {
-    if (!user || !db) return;
-    const vaultRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vault');
-    const unsubscribe = onSnapshot(vaultRef, 
-      (snapshot) => {
-        const items = snapshot.docs.map(doc => ({ id: Number(doc.id), ...doc.data() }));
-        setVault(items.sort((a, b) => b.addedAt - a.addedAt));
-      },
-      (error) => console.error("Vault fetch error:", error)
-    );
-    return () => unsubscribe();
-  }, [user]);
-
-  // --- FETCH MOVIES ---
-  useEffect(() => {
-    const fetchMovies = async () => {
-      if (!TMDB_API_KEY) {
-        setData(FALLBACK_DATA);
-        setFeatured(FALLBACK_DATA.trending[0]);
-        return;
-      }
-
-      try {
-        const fetchUrl = (endpoint) => fetch(`${BASE_URL}${endpoint}?api_key=${TMDB_API_KEY}`).then(res => res.json());
-        
-        const [trendingRes, actionRes, scifiRes] = await Promise.all([
-          fetchUrl("/trending/movie/day"),
-          fetchUrl("/discover/movie?with_genres=28"),
-          fetchUrl("/discover/movie?with_genres=878")
-        ]);
-
-        const newData = {
-          trending: trendingRes.results,
-          action: actionRes.results,
-          scifi: scifiRes.results
-        };
-
-        setData(newData);
-        setFeatured(newData.trending[0]);
-      } catch (error) {
-        console.error("Failed to fetch from TMDB:", error);
-        setData(FALLBACK_DATA);
-        setFeatured(FALLBACK_DATA.trending[0]);
+        const res = await fetch(`${BASE_URL}${endpoint}?api_key=${TMDB_API_KEY}`);
+        const data = await res.json();
+        return data.results.filter(m => m.backdrop_path && m.poster_path);
+      } catch (err) {
+        console.error("Failed to fetch:", err);
+        return [];
       }
     };
 
-    fetchMovies();
+    const loadAll = async () => {
+      const trending = await fetchMovies('/trending/movie/week');
+      const action = await fetchMovies('/discover/movie?with_genres=28');
+      const scifi = await fetchMovies('/discover/movie?with_genres=878');
+      
+      if (trending.length > 0) {
+        setMovies({ trending, action, scifi });
+      }
+    };
+
+    loadAll();
   }, []);
 
-  // --- ADD TO VAULT LOGIC ---
-  const toggleVault = async (movie) => {
-    if (!movie) return;
-    
-    if (!db || !user) {
-      setVault(prev => {
-        const exists = prev.some(m => m.id === movie.id);
-        if (exists) return prev.filter(m => m.id !== movie.id);
-        return [{...movie, addedAt: Date.now()}, ...prev];
-      });
-      return;
-    }
-
-    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'vault', movie.id.toString());
-    const exists = vault.some(m => m.id === movie.id);
-    
-    try {
-      if (exists) {
-        await deleteDoc(docRef);
-      } else {
-        await setDoc(docRef, {
-          id: movie.id,
-          title: movie.title || "",
-          backdrop_path: movie.backdrop_path || "",
-          poster_path: movie.poster_path || "",
-          vote_average: movie.vote_average || 0,
-          release_date: movie.release_date || "",
-          overview: movie.overview || "",
-          addedAt: Date.now()
-        });
-      }
-    } catch (e) {
-      console.error("Error updating vault:", e);
+  const toggleVault = (movie) => {
+    if (vault.find(m => m.id === movie.id)) {
+      setVault(vault.filter(m => m.id !== movie.id));
+    } else {
+      setVault([...vault, movie]);
     }
   };
 
-  const isFeaturedInVault = featured ? vault.some(m => m.id === featured.id) : false;
-  const isActiveMovieInVault = activeMovie ? vault.some(m => m.id === activeMovie.id) : false;
+  // --- VIEWS ---
+  const HomeView = () => {
+    const heroMovie = movies.trending[0] || MOCK_MOVIES[0];
+    const isSaved = vault.some(m => m.id === heroMovie.id);
 
-  return (
-    <div className="relative min-h-screen bg-black text-neutral-100 font-sans overflow-x-hidden selection:bg-white/30 selection:text-white">
-      <FilmGrain />
-
-      <nav className="absolute top-0 w-full z-40 py-8 px-6 md:px-16 flex justify-between items-center pointer-events-none">
-        <div 
-          onClick={() => setActiveTab('home')}
-          className="text-2xl font-bold tracking-widest text-white drop-shadow-md pointer-events-auto cursor-pointer"
-        >
-          L U M I N A
-        </div>
-        <div className="flex items-center gap-4">
-          {user && (
-            <span className="hidden md:inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 tracking-widest uppercase bg-emerald-400/10 px-3 py-1.5 rounded-full border border-emerald-400/20 shadow-lg backdrop-blur-md">
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" /> Cloud Synced
-            </span>
-          )}
-          <div className="w-10 h-10 rounded-full overflow-hidden pointer-events-auto cursor-pointer border border-white/10 hover:border-white/40 transition-colors shadow-xl">
-             <img src="https://i.pravatar.cc/100?img=33" alt="Profile" className="w-full h-full object-cover" />
+    return (
+      <div className="pb-32">
+        {/* HERO SECTION */}
+        <div className="relative w-full h-[85vh] min-h-[700px] flex flex-col justify-end pb-24 px-12 group">
+          <div className="absolute inset-0 w-full h-full">
+            <img 
+              src={heroMovie.backdrop_path.startsWith('/') ? `${IMAGE_BASE}${heroMovie.backdrop_path}` : heroMovie.backdrop_path} 
+              alt={heroMovie.title}
+              className="w-full h-full object-cover opacity-60"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#030303] via-[#030303]/60 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-r from-[#030303] via-[#030303]/40 to-transparent" />
           </div>
-        </div>
-      </nav>
 
-      {/* --- COMMAND CENTER --- */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 p-2 bg-[#111111]/90 backdrop-blur-3xl border border-white/10 rounded-full shadow-[0_30px_60px_rgba(0,0,0,0.8)]">
-        <button onClick={() => setActiveTab('home')} className={`p-3 md:p-4 rounded-full transition-all duration-300 ${activeTab === 'home' ? 'bg-white/15 text-white shadow-inner' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
-          <Home className="w-5 h-5 md:w-6 md:h-6" strokeWidth={activeTab === 'home' ? 2.5 : 2} />
-        </button>
-        <button onClick={() => setActiveTab('explore')} className={`p-3 md:p-4 rounded-full transition-all duration-300 ${activeTab === 'explore' ? 'bg-white/15 text-white shadow-inner' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
-          <Compass className="w-5 h-5 md:w-6 md:h-6" strokeWidth={activeTab === 'explore' ? 2.5 : 2} />
-        </button>
-
-        {/* Improved Aura Button: Sleek glass pill instead of stark white block */}
-        <div className="px-1 md:px-2 flex items-center">
-          <button 
-            onClick={() => setAiModalOpen(true)}
-            className="flex items-center gap-2 px-5 py-3 md:py-3.5 bg-white/5 border border-white/10 hover:bg-white hover:text-black hover:border-white text-white rounded-full font-semibold tracking-tight transition-all duration-300 shadow-lg"
-          >
-            <Sparkles className="w-4 h-4 md:w-5 md:h-5" />
-            <span className="hidden md:block text-sm">Aura Engine</span>
-          </button>
-        </div>
-
-        <button onClick={() => setActiveTab('search')} className={`p-3 md:p-4 rounded-full transition-all duration-300 ${activeTab === 'search' ? 'bg-white/15 text-white shadow-inner' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
-          <Search className="w-5 h-5 md:w-6 md:h-6" strokeWidth={activeTab === 'search' ? 2.5 : 2} />
-        </button>
-        <button onClick={() => setActiveTab('vault')} className={`p-3 md:p-4 rounded-full transition-all duration-300 relative ${activeTab === 'vault' ? 'bg-emerald-500/20 text-emerald-400 shadow-inner' : 'text-white/40 hover:text-emerald-400 hover:bg-white/5'}`}>
-          <Heart className="w-5 h-5 md:w-6 md:h-6" strokeWidth={activeTab === 'vault' ? 2.5 : 2} />
-          {vault.length > 0 && <span className="absolute top-2 right-2 md:top-3 md:right-3 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-[#111]" />}
-        </button>
-      </div>
-
-      {/* --- DYNAMIC VIEWS RENDERER --- */}
-      <main className="min-h-screen">
-        {activeTab === 'home' && <HomeView featured={featured} data={data} vault={vault} onSelect={setActiveMovie} toggleVault={toggleVault} isFeaturedInVault={isFeaturedInVault} />}
-        {activeTab === 'explore' && <ExploreView data={data} onSelect={setActiveMovie} />}
-        {activeTab === 'search' && <SearchView data={data} onSelect={setActiveMovie} />}
-        {activeTab === 'vault' && <VaultView vault={vault} onSelect={setActiveMovie} />}
-      </main>
-
-      {/* --- AI COMMAND PALETTE --- */}
-      {aiModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[15vh] px-4 pointer-events-auto">
-          <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-2xl transition-opacity animate-in fade-in"
-            onClick={() => setAiModalOpen(false)}
-          />
-          
-          <div className="relative w-full max-w-3xl bg-[#111111]/90 backdrop-blur-3xl border border-white/10 rounded-3xl shadow-[0_30px_60px_rgba(0,0,0,0.8)] overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="relative flex items-center px-6 py-5 border-b border-white/10">
-              <Sparkles className="w-6 h-6 text-white/50 mr-4" />
-              <input 
-                type="text" 
-                value={promptQuery}
-                onChange={(e) => setPromptQuery(e.target.value)}
-                autoFocus
-                placeholder="Ask Aura to find something specific..."
-                className="flex-1 bg-transparent border-none outline-none text-white text-xl md:text-2xl font-medium placeholder:text-white/30"
-              />
+          <div className="relative z-10 max-w-3xl">
+            <h1 className="text-6xl md:text-8xl font-serif text-white tracking-tight leading-[1.1] mb-4">
+              {heroMovie.title}
+            </h1>
+            <div className="flex items-center gap-4 text-xs font-sans tracking-widest text-white/60 uppercase mb-6">
+              <span>{heroMovie.release_date?.split('-')[0]}</span>
+              <span>•</span>
+              <span>Feature Film</span>
+              <span>•</span>
+              <span className="flex items-center gap-1"><Sparkles size={12}/> {heroMovie.vote_average?.toFixed(1)}</span>
+            </div>
+            <p className="text-lg text-white/70 max-w-xl leading-relaxed font-sans font-light mb-8">
+              {heroMovie.overview}
+            </p>
+            <div className="flex items-center gap-4">
+              <button className="flex items-center gap-3 bg-white text-black px-8 py-4 rounded-sm font-sans text-sm font-semibold hover:bg-white/90 transition-colors">
+                <Play size={18} fill="currentColor" /> Play Feature
+              </button>
               <button 
-                onClick={() => setAiModalOpen(false)}
-                className="p-2 rounded-full text-white/30 hover:text-white hover:bg-white/10 transition-colors ml-4"
+                onClick={() => toggleVault(heroMovie)}
+                className="flex items-center gap-3 bg-white/10 backdrop-blur-md text-white px-8 py-4 rounded-sm font-sans text-sm border border-white/10 hover:bg-white/20 transition-colors"
               >
-                <X className="w-5 h-5" />
+                {isSaved ? <><Check size={18} /> Saved to Vault</> : <><Plus size={18} /> Add to Vault</>}
               </button>
             </div>
-
-            <div className="p-6 md:p-8 bg-black/20">
-              <p className="text-xs font-semibold tracking-widest uppercase text-white/30 mb-4">Suggested Curations</p>
-              <div className="flex flex-col gap-2">
-                {[
-                  "Cinematography that feels like a painting",
-                  "Slow-burn psychological thrillers from the 90s",
-                  "Cozy movies set in New York during Autumn"
-                ].map((tag) => (
-                  <button 
-                    key={tag} 
-                    onClick={() => { setPromptQuery(tag); setTimeout(() => setAiModalOpen(false), 500); }} 
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/5 text-left transition-colors group"
-                  >
-                    <Search className="w-4 h-4 text-white/20 group-hover:text-white/60" />
-                    <span className="text-white/70 font-medium group-hover:text-white text-lg">{tag}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
-      )}
 
-      {/* --- MOVIE DETAIL MODAL --- */}
-      {activeMovie && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 pointer-events-auto">
-          <div 
-            className="absolute inset-0 bg-black/80 backdrop-blur-xl transition-opacity animate-in fade-in"
-            onClick={() => setActiveMovie(null)}
-          />
+        {/* ROWS */}
+        <div className="px-12 mt-12 space-y-20">
+          {vault.length > 0 && <MovieRow title="Your Personal Vault" data={vault} />}
+          <MovieRow title="The Global Zeitgeist" data={movies.trending.slice(1)} />
+          <MovieRow title="Kinetic Cinema" data={movies.action} />
+          <MovieRow title="Visions of Tomorrow" data={movies.scifi} />
+        </div>
+      </div>
+    );
+  };
+
+  const ExploreView = () => (
+    <div className="pt-32 px-12 pb-32 min-h-screen">
+      <h2 className="text-4xl font-serif text-white mb-12">Curated Collections</h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        {movies.trending.map((movie) => (
+          <MovieCard key={movie.id} movie={movie} />
+        ))}
+      </div>
+    </div>
+  );
+
+  const SearchView = () => (
+    <div className="pt-40 px-12 pb-32 min-h-screen flex flex-col items-center">
+      <input 
+        type="text" 
+        placeholder="Search for directors, films, or moods..." 
+        className="w-full max-w-3xl bg-transparent border-b-2 border-white/20 text-4xl font-serif text-white placeholder-white/30 pb-4 focus:outline-none focus:border-white transition-colors"
+      />
+    </div>
+  );
+
+  const VaultView = () => (
+    <div className="pt-32 px-12 pb-32 min-h-screen">
+      <h2 className="text-4xl font-serif text-white mb-12">Your Vault</h2>
+      {vault.length === 0 ? (
+        <p className="text-white/40 font-sans">Your vault is currently empty. Curate your collection by adding films.</p>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          {vault.map((movie) => (
+            <MovieCard key={movie.id} movie={movie} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  // --- COMPONENTS ---
+  const MovieRow = ({ title, data }) => (
+    <div className="flex flex-col space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xl font-serif text-white tracking-wide">{title}</h3>
+        <button className="text-xs font-sans tracking-widest text-white/50 uppercase hover:text-white flex items-center gap-1 transition-colors">
+          View All <ChevronRight size={14} />
+        </button>
+      </div>
+      <div className="flex gap-6 overflow-x-auto pb-8 scrollbar-hide snap-x">
+        {data.map((movie) => (
+          <div key={movie.id} className="min-w-[240px] md:min-w-[280px] snap-start">
+            <MovieCard movie={movie} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const MovieCard = ({ movie }) => (
+    <div className="group flex flex-col gap-4 cursor-pointer">
+      <div className="relative aspect-[2/3] overflow-hidden rounded-sm bg-white/5">
+        <img 
+          src={movie.poster_path.startsWith('/') ? `${IMAGE_BASE}${movie.poster_path}` : movie.poster_path}
+          alt={movie.title}
+          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 group-hover:opacity-80"
+          loading="lazy"
+        />
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+          <button className="bg-white/20 backdrop-blur-md p-4 rounded-full text-white transform scale-50 group-hover:scale-100 transition-all duration-300 ease-out">
+            <Play size={24} fill="currentColor" />
+          </button>
+        </div>
+      </div>
+      <div>
+        <h4 className="text-white font-serif text-lg leading-tight group-hover:text-white/80 transition-colors">{movie.title}</h4>
+        <div className="flex items-center gap-3 text-xs font-sans text-white/40 mt-1">
+          <span>{movie.release_date?.split('-')[0]}</span>
+          <span className="flex items-center gap-1"><Sparkles size={10}/> {movie.vote_average?.toFixed(1)}</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#030303] selection:bg-white selection:text-black font-sans">
+      {/* TOP LOGO BAR */}
+      <header className="absolute top-0 w-full p-12 z-50 flex justify-between items-center pointer-events-none">
+        <div className="text-2xl font-serif text-white tracking-[0.2em] font-medium pointer-events-auto">
+          L U M I N A
+        </div>
+        <div className="w-10 h-10 rounded-full bg-white/10 overflow-hidden pointer-events-auto border border-white/20">
+          <img src="https://i.pravatar.cc/150?u=lumina" alt="Profile" className="w-full h-full object-cover" />
+        </div>
+      </header>
+
+      {/* DYNAMIC VIEW ROUTING */}
+      <main>
+        {activeTab === 'home' && <HomeView />}
+        {activeTab === 'explore' && <ExploreView />}
+        {activeTab === 'search' && <SearchView />}
+        {activeTab === 'vault' && <VaultView />}
+      </main>
+
+      {/* CENTRAL CONTROL HUB (BOTTOM DOCK) */}
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
+        <div className="bg-[#0a0a0a]/80 backdrop-blur-2xl border border-white/10 p-2 rounded-2xl flex items-center gap-2 shadow-2xl">
+          <button onClick={() => setActiveTab('home')} className={`p-3 rounded-xl transition-all ${activeTab === 'home' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
+            <Home size={20} strokeWidth={activeTab === 'home' ? 2.5 : 2} />
+          </button>
+          <button onClick={() => setActiveTab('explore')} className={`p-3 rounded-xl transition-all ${activeTab === 'explore' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
+            <Compass size={20} strokeWidth={activeTab === 'explore' ? 2.5 : 2} />
+          </button>
           
-          <div className="relative w-full max-w-5xl bg-[#111111] border border-white/10 rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh] animate-in zoom-in-95">
-            <button 
-              onClick={() => setActiveMovie(null)}
-              className="absolute top-6 right-6 z-50 w-10 h-10 bg-black/40 backdrop-blur-xl rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-black/60 transition-all border border-white/10"
-            >
-              <X className="w-5 h-5" />
-            </button>
+          <div className="w-px h-8 bg-white/10 mx-2" />
+          
+          <button 
+            onClick={() => setIsAuraOpen(true)}
+            className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all group"
+          >
+            <Sparkles size={18} className="group-hover:animate-pulse" />
+            <span className="text-sm font-sans tracking-wide">Aura</span>
+          </button>
 
-            <div className="w-full md:w-[45%] h-64 md:h-auto relative">
-              <img 
-                src={`${IMG_BASE}${activeMovie.poster_path}`} 
-                alt={activeMovie.title}
-                onError={(e) => { e.target.src = "https://image.tmdb.org/t/p/original/8rpDcsfLJypbO6vtecwmH3X32nd.jpg" }}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t md:bg-gradient-to-r from-[#111111] via-[#111111]/20 to-transparent" />
-            </div>
+          <div className="w-px h-8 bg-white/10 mx-2" />
 
-            <div className="w-full md:w-[55%] overflow-y-auto p-8 md:p-14 flex flex-col justify-center hide-scrollbar">
-              <h2 className="text-3xl md:text-5xl font-bold tracking-tighter text-white mb-4 leading-tight">
-                {activeMovie.title}
-              </h2>
-              
-              <div className="flex items-center gap-3 text-white/50 text-sm font-semibold tracking-wide mb-8">
-                <span>{activeMovie.release_date?.substring(0, 4)}</span>
-                <span>•</span>
-                <div className="flex items-center gap-1">
-                  <Star className="w-4 h-4 text-white fill-current" />
-                  <span>{activeMovie.vote_average?.toFixed(1)}</span>
+          <button onClick={() => setActiveTab('search')} className={`p-3 rounded-xl transition-all ${activeTab === 'search' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
+            <Search size={20} strokeWidth={activeTab === 'search' ? 2.5 : 2} />
+          </button>
+          <button onClick={() => setActiveTab('vault')} className={`p-3 rounded-xl transition-all ${activeTab === 'vault' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
+            <Bookmark size={20} strokeWidth={activeTab === 'vault' ? 2.5 : 2} />
+          </button>
+        </div>
+      </div>
+
+      {/* AURA AI MODAL */}
+      {isAuraOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-xl" onClick={() => setIsAuraOpen(false)} />
+          <div className="relative w-full max-w-2xl bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-8">
+                <div className="flex items-center gap-2 text-white/50 font-sans text-sm tracking-widest uppercase">
+                  <Sparkles size={14} /> Aura Intelligence
                 </div>
-              </div>
-              
-              <p className="text-white/80 text-lg leading-relaxed mb-10 font-medium">
-                {activeMovie.overview || "No description available for this title."}
-              </p>
-
-              <div className="flex gap-4">
-                <button className="flex-1 bg-white text-black py-4 rounded-full font-bold tracking-tight flex items-center justify-center gap-2 hover:bg-neutral-200 transition-colors">
-                  <Play className="w-5 h-5 fill-current" /> Play Movie
+                <button onClick={() => setIsAuraOpen(false)} className="text-white/40 hover:text-white transition-colors">
+                  <X size={20} />
                 </button>
-                <button 
-                  onClick={() => toggleVault(activeMovie)}
-                  className={`w-14 h-14 border rounded-full flex items-center justify-center transition-all active:scale-90 ${
-                    isActiveMovieInVault 
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
-                      : 'bg-white/5 border-white/10 text-white hover:bg-white/10'
-                  }`}
-                >
-                  {isActiveMovieInVault ? <Check className="w-6 h-6" /> : <Plus className="w-6 h-6" />}
+              </div>
+              <h2 className="text-3xl font-serif text-white mb-6">Describe the exact cinematic mood you are seeking.</h2>
+              <textarea 
+                className="w-full bg-transparent border-none text-xl font-sans font-light text-white/80 placeholder-white/30 resize-none focus:outline-none focus:ring-0 mb-8"
+                rows={3}
+                placeholder="e.g., A slow-burn psychological thriller set in a snowy landscape with a synth soundtrack..."
+              />
+              <div className="flex justify-end">
+                <button className="bg-white text-black px-6 py-3 rounded-sm font-sans text-sm font-semibold hover:bg-white/90 transition-colors flex items-center gap-2">
+                  <Sparkles size={16} /> Generate Curated Feed
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* INLINE CSS FOR SCROLLBAR HIDING */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+      `}} />
     </div>
   );
 }
