@@ -9,7 +9,6 @@ import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged }
 import { getFirestore, doc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
 
 // --- CLOUD STORAGE & AUTH SETUP ---
-// This safely initializes Firebase if you provide keys later, but defaults to a local fallback so your app doesn't crash on Vercel out of the box.
 const getFirebaseInit = () => {
   try {
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
@@ -28,9 +27,9 @@ const getFirebaseInit = () => {
 const { app, auth, db, appId } = getFirebaseInit();
 
 // --- TMDB API CONFIGURATION ---
-// IMPORTANT FOR GITHUB/VERCEL: 
-// When deploying to Vercel with Vite, replace the empty string below with:
-// import.meta.env.VITE_TMDB_API_KEY
+// ⚠️ VERCEL INSTRUCTION:
+// Change the empty string below to: import.meta.env.VITE_TMDB_API_KEY
+// (It is left empty here so the preview canvas parser does not crash)
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || ""; 
 const BASE_URL = "https://api.themoviedb.org/3";
 const IMG_BASE = "https://image.tmdb.org/t/p/original";
@@ -46,18 +45,19 @@ const FALLBACK_DATA = {
     { id: 5, title: "The Batman", backdrop_path: "/b0PlSFdSmBgZZqglk1WpBnd78zE.jpg", poster_path: "/74xTEgt7R36Fpooo50r9T25onhq.jpg", vote_average: 7.7, release_date: "2022-03-01", overview: "In his second year of fighting crime, Batman uncovers corruption in Gotham City that connects to his own family while facing a serial killer known as the Riddler." },
   ],
   action: [
-    { id: 6, title: "John Wick: Chapter 4", backdrop_path: "/vI3aJMj8RucWHvJZLMMfGDjH31s.jpg", poster_path: "/vZloFAK7NmvMGKE7VkF5UHaz0I.jpg", vote_average: 7.8, release_date: "2023-03-22" },
-    { id: 7, title: "Mad Max: Fury Road", backdrop_path: "/nlCHUWjY9XWbuEUQauCBgnY8ymF.jpg", poster_path: "/8tZYtuWezp8JbcsvHYO0O46tFbo.jpg", vote_average: 7.6, release_date: "2015-05-13" },
-    { id: 8, title: "Mission: Impossible - Dead Reckoning", backdrop_path: "/cwKUydpeeaJjyGtP9mNlZc0wHk1.jpg", poster_path: "/NNxYkU70HPurnNCSiCjYAmacwm.jpg", vote_average: 7.6, release_date: "2023-07-08" },
+    { id: 6, title: "John Wick: Chapter 4", backdrop_path: "/vI3aJMj8RucWHvJZLMMfGDjH31s.jpg", poster_path: "/vZloFAK7NmvMGKE7VkF5UHaz0I.jpg", vote_average: 7.8, release_date: "2023-03-22", overview: "With the price on his head ever increasing, John Wick uncovers a path to defeating The High Table." },
+    { id: 7, title: "Mad Max: Fury Road", backdrop_path: "/nlCHUWjY9XWbuEUQauCBgnY8ymF.jpg", poster_path: "/8tZYtuWezp8JbcsvHYO0O46tFbo.jpg", vote_average: 7.6, release_date: "2015-05-13", overview: "An apocalyptic story set in the furthest reaches of our planet, in a stark desert landscape where humanity is broken." },
+    { id: 8, title: "Mission: Impossible - Dead Reckoning", backdrop_path: "/cwKUydpeeaJjyGtP9mNlZc0wHk1.jpg", poster_path: "/NNxYkU70HPurnNCSiCjYAmacwm.jpg", vote_average: 7.6, release_date: "2023-07-08", overview: "Ethan Hunt and his IMF team embark on their most dangerous mission yet." },
   ],
   scifi: [
-    { id: 11, title: "Blade Runner 2049", backdrop_path: "/ilRyazdflIgEqbXIQs1zEGE1q0w.jpg", poster_path: "/gajva2L0rIGDWE4SyB6RoIG8ISS.jpg", vote_average: 7.6, release_date: "2017-10-04" },
-    { id: 12, title: "Interstellar", backdrop_path: "/xJHokMbljvjX5LSWorthIN4219.jpg", poster_path: "/gEU2QlsUUHX4wk5EheA6yVhe21b.jpg", vote_average: 8.4, release_date: "2014-11-05" },
-    { id: 13, title: "Arrival", backdrop_path: "/xT98tLqatZPQApyRmlLCENDemiJ.jpg", poster_path: "/pEzxhe6Z6xXzC830x10f78KzGk7.jpg", vote_average: 7.3, release_date: "2016-11-10" },
+    { id: 11, title: "Blade Runner 2049", backdrop_path: "/ilRyazdflIgEqbXIQs1zEGE1q0w.jpg", poster_path: "/gajva2L0rIGDWE4SyB6RoIG8ISS.jpg", vote_average: 7.6, release_date: "2017-10-04", overview: "Thirty years after the events of the first film, a new blade runner, LAPD Officer K, unearths a long-buried secret." },
+    { id: 12, title: "Interstellar", backdrop_path: "/xJHokMbljvjX5LSWorthIN4219.jpg", poster_path: "/gEU2QlsUUHX4wk5EheA6yVhe21b.jpg", vote_average: 8.4, release_date: "2014-11-05", overview: "The adventures of a group of explorers who make use of a newly discovered wormhole to surpass the limitations on human space travel." },
+    { id: 13, title: "Arrival", backdrop_path: "/xT98tLqatZPQApyRmlLCENDemiJ.jpg", poster_path: "/pEzxhe6Z6xXzC830x10f78KzGk7.jpg", vote_average: 7.3, release_date: "2016-11-10", overview: "Taking place after alien crafts land around the world, an expert linguist is recruited by the military to determine whether they come in peace or are a threat." },
   ]
 };
 
-// --- COMPONENTS ---
+// --- REUSABLE COMPONENTS ---
+
 const FilmGrain = () => (
   <div 
     className="pointer-events-none fixed inset-0 z-50 h-full w-full opacity-[0.15] mix-blend-overlay"
@@ -65,6 +65,40 @@ const FilmGrain = () => (
       backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' 
     }}
   />
+);
+
+// Extracted for consistency across all views
+const MovieItem = ({ movie, onSelect, layout = 'row' }) => (
+  <div className={`relative ${layout === 'row' ? 'w-[140px] md:w-[200px] snap-start flex-none' : 'w-full'} group/item cursor-pointer`}>
+    <div 
+      onClick={() => onSelect(movie)}
+      className="w-full aspect-[2/3] rounded-xl overflow-hidden bg-[#111] mb-3 relative shadow-lg ring-1 ring-white/5 transition-all duration-500 ease-out group-hover/item:ring-white/20 group-hover/item:shadow-[0_20px_40px_rgba(0,0,0,0.6)] group-hover/item:-translate-y-2 active:scale-[0.97]"
+    >
+      <img 
+        src={`${IMG_BASE_SM}${movie.poster_path}`} 
+        alt={movie.title}
+        onError={(e) => { e.target.src = "https://via.placeholder.com/500x750/111/fff?text=" + encodeURIComponent(movie.title) }}
+        className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover/item:scale-110"
+      />
+      <div className="absolute inset-0 bg-black/0 group-hover/item:bg-black/30 backdrop-blur-[0px] group-hover/item:backdrop-blur-[2px] transition-all duration-500 ease-out flex items-center justify-center">
+        <PlayCircle className="w-12 h-12 text-white opacity-0 group-hover/item:opacity-100 transform scale-50 group-hover/item:scale-100 transition-all duration-500 ease-out drop-shadow-2xl" strokeWidth={1.5} />
+      </div>
+    </div>
+    
+    <div className="px-1 transition-transform duration-500 ease-out group-hover/item:translate-x-1">
+      <h4 className="font-semibold text-white/90 text-sm md:text-base leading-snug truncate group-hover/item:text-white transition-colors">
+        {movie.title}
+      </h4>
+      <div className="flex items-center gap-2 mt-1 text-xs font-medium text-white/40 group-hover/item:text-white/60 transition-colors">
+        <span>{movie.release_date?.substring(0, 4)}</span>
+        <span>•</span>
+        <div className="flex items-center gap-1">
+          <Star className="w-3 h-3 fill-current text-white/60" />
+          <span>{movie.vote_average?.toFixed(1) || 'N/A'}</span>
+        </div>
+      </div>
+    </div>
+  </div>
 );
 
 const MovieRow = ({ title, movies, onSelect, isSpecial = false }) => {
@@ -109,48 +143,163 @@ const MovieRow = ({ title, movies, onSelect, isSpecial = false }) => {
           <ChevronRight className="w-8 h-8 text-white drop-shadow-2xl hover:scale-110 transition-transform" />
         </button>
 
-        <div 
-          ref={scrollRef}
-          className="flex gap-4 md:gap-6 overflow-x-auto snap-x snap-mandatory hide-scrollbar px-6 md:px-16 pb-12 pt-4"
-        >
+        <div ref={scrollRef} className="flex gap-4 md:gap-6 overflow-x-auto snap-x snap-mandatory hide-scrollbar px-6 md:px-16 pb-12 pt-4">
           {movies.map((movie) => (
-            <div 
-              key={movie.id}
-              onClick={() => onSelect(movie)}
-              className="relative flex-none w-[140px] md:w-[200px] snap-start cursor-pointer group/card active:scale-[0.97] transition-transform duration-300 ease-out"
-            >
-              <div className="w-full aspect-[2/3] rounded-xl overflow-hidden bg-[#111] mb-4 relative shadow-lg ring-1 ring-white/5 transition-all duration-500 ease-out group-hover/card:ring-white/20 group-hover/card:shadow-[0_20px_40px_rgba(0,0,0,0.6)] group-hover/card:-translate-y-2">
-                <img 
-                  src={`${IMG_BASE_SM}${movie.poster_path}`} 
-                  alt={movie.title}
-                  onError={(e) => { e.target.src = "https://via.placeholder.com/500x750/111/fff?text=" + encodeURIComponent(movie.title) }}
-                  className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover/card:scale-110"
-                />
-                <div className="absolute inset-0 bg-black/0 group-hover/card:bg-black/30 backdrop-blur-[0px] group-hover/card:backdrop-blur-[2px] transition-all duration-500 ease-out flex items-center justify-center">
-                  <PlayCircle className="w-12 h-12 text-white opacity-0 group-hover/card:opacity-100 transform scale-50 group-hover/card:scale-100 transition-all duration-500 ease-out drop-shadow-2xl" strokeWidth={1.5} />
-                </div>
-              </div>
-              
-              <div className="px-1 transition-transform duration-500 ease-out group-hover/card:translate-x-1">
-                <h4 className="font-semibold text-white/90 text-sm md:text-base leading-snug truncate group-hover/card:text-white transition-colors">
-                  {movie.title}
-                </h4>
-                <div className="flex items-center gap-2 mt-1 text-xs font-medium text-white/40 group-hover/card:text-white/60 transition-colors">
-                  <span>{movie.release_date?.substring(0, 4)}</span>
-                  <span>•</span>
-                  <div className="flex items-center gap-1">
-                    <Star className="w-3 h-3 fill-current text-white/60" />
-                    <span>{movie.vote_average?.toFixed(1) || 'N/A'}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <MovieItem key={movie.id} movie={movie} onSelect={onSelect} layout="row" />
           ))}
         </div>
       </div>
     </div>
   );
 };
+
+
+// --- VIEW LAYOUTS ---
+
+const HomeView = ({ featured, data, vault, onSelect, toggleVault, isFeaturedInVault }) => (
+  <>
+    {featured && (
+      <header className="relative w-full h-[80vh] min-h-[650px] md:h-[90vh] flex items-end pb-32 pt-32">
+        <div className="absolute inset-0 z-0 overflow-hidden bg-[#0a0a0a]">
+          <img 
+            src={`${IMG_BASE}${featured.backdrop_path}`} 
+            alt={featured.title}
+            onError={(e) => { e.target.src = "https://image.tmdb.org/t/p/original/8rpDcsfLJypbO6vtecwmH3X32nd.jpg" }}
+            className="w-full h-full object-cover opacity-80 animate-[slowPan_40s_ease-in-out_infinite_alternate]"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/20 to-transparent" />
+        </div>
+
+        <div className="container mx-auto px-6 md:px-16 relative z-10">
+          <div className="max-w-3xl">
+            <h1 className="text-5xl md:text-7xl lg:text-[5.5rem] font-bold tracking-tighter mb-4 text-white leading-[1.05]">
+              {featured.title}
+            </h1>
+            
+            <div className="flex items-center gap-4 mb-6 text-sm font-semibold tracking-wide text-white/60">
+              <span>{featured.release_date?.substring(0, 4)}</span>
+              <span className="w-1 h-1 rounded-full bg-white/30" />
+              <span>Feature Film</span>
+              <span className="w-1 h-1 rounded-full bg-white/30" />
+              <div className="flex items-center gap-1">
+                <Star className="w-4 h-4 text-white fill-current" />
+                <span>{featured.vote_average?.toFixed(1)}</span>
+              </div>
+            </div>
+
+            <p className="text-lg md:text-xl text-white/70 font-medium mb-10 leading-relaxed max-w-2xl line-clamp-3 md:line-clamp-none">
+              {featured.overview}
+            </p>
+
+            <div className="flex flex-wrap items-center gap-4">
+              <button 
+                onClick={() => onSelect(featured)}
+                className="flex items-center gap-3 bg-white text-black px-8 py-4 rounded-full font-bold tracking-tight transition-all hover:scale-105 hover:bg-neutral-200"
+              >
+                <Play className="w-5 h-5 fill-current" />
+                <span>Play Trailer</span>
+              </button>
+              <button 
+                onClick={() => toggleVault(featured)}
+                className={`flex items-center gap-3 backdrop-blur-xl border px-8 py-4 rounded-full font-semibold tracking-tight transition-all active:scale-95 ${
+                  isFeaturedInVault 
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' 
+                    : 'bg-white/10 border-white/10 text-white hover:bg-white/20'
+                }`}
+              >
+                {isFeaturedInVault ? <Check className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                <span>{isFeaturedInVault ? "In Your Vault" : "Add to Vault"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+    )}
+
+    <section className="relative z-10 -mt-8 pb-32">
+      {vault.length > 0 && <MovieRow title="Your Personal Vault" movies={vault} onSelect={onSelect} isSpecial={true} />}
+      <MovieRow title="The Global Zeitgeist" movies={data.trending} onSelect={onSelect} />
+      <MovieRow title="Kinetic Cinema" movies={data.action} onSelect={onSelect} />
+      <MovieRow title="Visions of Tomorrow" movies={data.scifi} onSelect={onSelect} />
+    </section>
+  </>
+);
+
+const ExploreView = ({ data, onSelect }) => {
+  // Combine all data and remove duplicates based on movie ID
+  const allMovies = [...data.trending, ...data.action, ...data.scifi].filter((v,i,a)=>a.findIndex(v2=>(v2.id===v.id))===i);
+  
+  return (
+    <div className="pt-32 pb-40 px-6 md:px-16 min-h-screen">
+      <div className="flex items-center gap-3 mb-10">
+        <Compass className="w-8 h-8 text-white/50" />
+        <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-white">Explore</h2>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-10 md:gap-x-6 md:gap-y-12">
+        {allMovies.map(movie => <MovieItem key={movie.id} movie={movie} onSelect={onSelect} layout="grid" />)}
+      </div>
+    </div>
+  );
+};
+
+const SearchView = ({ data, onSelect }) => {
+  const [query, setQuery] = useState('');
+  const allMovies = [...data.trending, ...data.action, ...data.scifi].filter((v,i,a)=>a.findIndex(v2=>(v2.id===v.id))===i);
+  const filtered = allMovies.filter(m => m.title.toLowerCase().includes(query.toLowerCase()));
+  
+  return (
+    <div className="pt-32 pb-40 px-6 md:px-16 min-h-screen flex flex-col items-center">
+      <div className="w-full max-w-4xl relative mb-16 animate-in slide-in-from-top-4 duration-500">
+         <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-7 h-7 text-white/40" />
+         <input 
+           autoFocus 
+           placeholder="Search titles, directors, or genres..." 
+           value={query} 
+           onChange={e => setQuery(e.target.value)} 
+           className="w-full bg-white/5 backdrop-blur-xl border border-white/10 rounded-full py-6 pl-20 pr-8 text-xl md:text-2xl font-medium text-white outline-none focus:border-white/40 focus:bg-white/10 transition-all shadow-2xl" 
+         />
+      </div>
+
+      {query && filtered.length === 0 ? (
+        <div className="text-center text-white/40 mt-12">
+          <p className="text-2xl font-medium">No results found for "{query}"</p>
+          <p className="mt-2 text-sm">Try asking the Aura Engine to find something similar.</p>
+        </div>
+      ) : (
+        <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-10 md:gap-x-6 md:gap-y-12">
+          {filtered.map(movie => <MovieItem key={movie.id} movie={movie} onSelect={onSelect} layout="grid" />)}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const VaultView = ({ vault, onSelect }) => (
+  <div className="pt-32 pb-40 px-6 md:px-16 min-h-screen">
+    <div className="flex items-center justify-between mb-10 border-b border-white/10 pb-6">
+      <div className="flex items-center gap-3">
+        <Heart className="w-8 h-8 text-emerald-400 fill-current" />
+        <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-white">Your Vault</h2>
+      </div>
+      <span className="text-white/40 font-medium">{vault.length} Titles Saved</span>
+    </div>
+    
+    {vault.length === 0 ? (
+      <div className="flex flex-col items-center justify-center h-[40vh] text-center">
+        <Heart className="w-16 h-16 text-white/10 mb-4" />
+        <p className="text-2xl font-semibold text-white/50 mb-2">Your vault is empty</p>
+        <p className="text-white/30 max-w-md">Films and series you add to your vault will appear here for easy access across all your devices.</p>
+      </div>
+    ) : (
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-10 md:gap-x-6 md:gap-y-12">
+        {vault.map(movie => <MovieItem key={movie.id} movie={movie} onSelect={onSelect} layout="grid" />)}
+      </div>
+    )}
+  </div>
+);
+
+// --- MAIN APP ---
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -161,7 +310,7 @@ export default function App() {
   const [activeMovie, setActiveMovie] = useState(null);
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [promptQuery, setPromptQuery] = useState("");
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = useState('home'); // Controls the main view!
 
   // --- CLOUD AUTHENTICATION ---
   useEffect(() => {
@@ -186,7 +335,6 @@ export default function App() {
   // --- VAULT (MY LIST) SYNCING ---
   useEffect(() => {
     if (!user || !db) return;
-    
     const vaultRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vault');
     const unsubscribe = onSnapshot(vaultRef, 
       (snapshot) => {
@@ -274,11 +422,14 @@ export default function App() {
   const isActiveMovieInVault = activeMovie ? vault.some(m => m.id === activeMovie.id) : false;
 
   return (
-    <div className="relative min-h-screen bg-black text-neutral-100 font-sans overflow-x-hidden selection:bg-white/30 selection:text-white pb-20">
+    <div className="relative min-h-screen bg-black text-neutral-100 font-sans overflow-x-hidden selection:bg-white/30 selection:text-white">
       <FilmGrain />
 
       <nav className="absolute top-0 w-full z-40 py-8 px-6 md:px-16 flex justify-between items-center pointer-events-none">
-        <div className="text-2xl font-bold tracking-widest text-white drop-shadow-md">
+        <div 
+          onClick={() => setActiveTab('home')}
+          className="text-2xl font-bold tracking-widest text-white drop-shadow-md pointer-events-auto cursor-pointer"
+        >
           L U M I N A
         </div>
         <div className="flex items-center gap-4">
@@ -294,118 +445,41 @@ export default function App() {
       </nav>
 
       {/* --- COMMAND CENTER --- */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 p-2 bg-[#111111]/80 backdrop-blur-3xl border border-white/10 rounded-full shadow-[0_20px_40px_rgba(0,0,0,0.5)]">
-        {[
-          { id: 'home', icon: Home, label: 'Home' },
-          { id: 'explore', icon: Compass, label: 'Explore' },
-          { id: 'search', icon: Search, label: 'Search' },
-        ].map((item) => (
-          <button 
-            key={item.id}
-            onClick={() => setActiveTab(item.id)}
-            className={`p-3 md:p-4 rounded-full transition-all duration-300 group relative ${activeTab === item.id ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
-          >
-            <item.icon className="w-5 h-5 md:w-6 md:h-6" strokeWidth={activeTab === item.id ? 2.5 : 2} />
-          </button>
-        ))}
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 p-2 bg-[#111111]/90 backdrop-blur-3xl border border-white/10 rounded-full shadow-[0_30px_60px_rgba(0,0,0,0.8)]">
+        <button onClick={() => setActiveTab('home')} className={`p-3 md:p-4 rounded-full transition-all duration-300 ${activeTab === 'home' ? 'bg-white/15 text-white shadow-inner' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
+          <Home className="w-5 h-5 md:w-6 md:h-6" strokeWidth={activeTab === 'home' ? 2.5 : 2} />
+        </button>
+        <button onClick={() => setActiveTab('explore')} className={`p-3 md:p-4 rounded-full transition-all duration-300 ${activeTab === 'explore' ? 'bg-white/15 text-white shadow-inner' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
+          <Compass className="w-5 h-5 md:w-6 md:h-6" strokeWidth={activeTab === 'explore' ? 2.5 : 2} />
+        </button>
 
-        <div className="px-2">
+        {/* Improved Aura Button: Sleek glass pill instead of stark white block */}
+        <div className="px-1 md:px-2 flex items-center">
           <button 
             onClick={() => setAiModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-white text-black rounded-full font-semibold tracking-tight hover:scale-105 active:scale-95 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)]"
+            className="flex items-center gap-2 px-5 py-3 md:py-3.5 bg-white/5 border border-white/10 hover:bg-white hover:text-black hover:border-white text-white rounded-full font-semibold tracking-tight transition-all duration-300 shadow-lg"
           >
-            <Sparkles className="w-5 h-5" />
-            <span className="hidden md:block">Aura Engine</span>
+            <Sparkles className="w-4 h-4 md:w-5 md:h-5" />
+            <span className="hidden md:block text-sm">Aura Engine</span>
           </button>
         </div>
 
-        <button 
-          onClick={() => {
-            setActiveTab('vault');
-            window.scrollTo({ top: document.getElementById('vault-section')?.offsetTop - 100 || 0, behavior: 'smooth' });
-          }}
-          className={`p-3 md:p-4 rounded-full transition-all duration-300 group relative ${activeTab === 'vault' ? 'bg-emerald-500/20 text-emerald-400' : 'text-white/40 hover:text-emerald-400 hover:bg-emerald-500/10'}`}
-        >
-          <div className="relative">
-            <Heart className="w-5 h-5 md:w-6 md:h-6" strokeWidth={activeTab === 'vault' ? 2.5 : 2} />
-            {vault.length > 0 && (
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-[#111]" />
-            )}
-          </div>
+        <button onClick={() => setActiveTab('search')} className={`p-3 md:p-4 rounded-full transition-all duration-300 ${activeTab === 'search' ? 'bg-white/15 text-white shadow-inner' : 'text-white/40 hover:text-white hover:bg-white/5'}`}>
+          <Search className="w-5 h-5 md:w-6 md:h-6" strokeWidth={activeTab === 'search' ? 2.5 : 2} />
+        </button>
+        <button onClick={() => setActiveTab('vault')} className={`p-3 md:p-4 rounded-full transition-all duration-300 relative ${activeTab === 'vault' ? 'bg-emerald-500/20 text-emerald-400 shadow-inner' : 'text-white/40 hover:text-emerald-400 hover:bg-white/5'}`}>
+          <Heart className="w-5 h-5 md:w-6 md:h-6" strokeWidth={activeTab === 'vault' ? 2.5 : 2} />
+          {vault.length > 0 && <span className="absolute top-2 right-2 md:top-3 md:right-3 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-[#111]" />}
         </button>
       </div>
 
-      {/* --- HERO SECTION --- */}
-      {featured && (
-        <header className="relative w-full h-[80vh] min-h-[650px] md:h-[90vh] flex items-end pb-32 pt-32">
-          <div className="absolute inset-0 z-0 overflow-hidden bg-[#0a0a0a]">
-            <img 
-              src={`${IMG_BASE}${featured.backdrop_path}`} 
-              alt={featured.title}
-              onError={(e) => { e.target.src = "https://image.tmdb.org/t/p/original/8rpDcsfLJypbO6vtecwmH3X32nd.jpg" }}
-              className="w-full h-full object-cover opacity-80 animate-[slowPan_40s_ease-in-out_infinite_alternate]"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/20 to-transparent" />
-          </div>
-
-          <div className="container mx-auto px-6 md:px-16 relative z-10">
-            <div className="max-w-3xl">
-              <h1 className="text-5xl md:text-7xl lg:text-[5.5rem] font-bold tracking-tighter mb-4 text-white leading-[1.05]">
-                {featured.title}
-              </h1>
-              
-              <div className="flex items-center gap-4 mb-6 text-sm font-semibold tracking-wide text-white/60">
-                <span>{featured.release_date?.substring(0, 4)}</span>
-                <span className="w-1 h-1 rounded-full bg-white/30" />
-                <span>Feature Film</span>
-                <span className="w-1 h-1 rounded-full bg-white/30" />
-                <div className="flex items-center gap-1">
-                  <Star className="w-4 h-4 text-white fill-current" />
-                  <span>{featured.vote_average?.toFixed(1)}</span>
-                </div>
-              </div>
-
-              <p className="text-lg md:text-xl text-white/70 font-medium mb-10 leading-relaxed max-w-2xl line-clamp-3 md:line-clamp-none">
-                {featured.overview}
-              </p>
-
-              <div className="flex flex-wrap items-center gap-4">
-                <button 
-                  onClick={() => setActiveMovie(featured)}
-                  className="flex items-center gap-3 bg-white text-black px-8 py-4 rounded-full font-bold tracking-tight transition-all hover:scale-105 hover:bg-neutral-200"
-                >
-                  <Play className="w-5 h-5 fill-current" />
-                  <span>Play Trailer</span>
-                </button>
-                <button 
-                  onClick={() => toggleVault(featured)}
-                  className={`flex items-center gap-3 backdrop-blur-xl border px-8 py-4 rounded-full font-semibold tracking-tight transition-all active:scale-95 ${
-                    isFeaturedInVault 
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' 
-                      : 'bg-white/10 border-white/10 text-white hover:bg-white/20'
-                  }`}
-                >
-                  {isFeaturedInVault ? <Check className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                  <span>{isFeaturedInVault ? "In Your Vault" : "Add to Vault"}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </header>
-      )}
-
-      {/* --- MOVIE ROWS --- */}
-      <section className="relative z-10 -mt-8 pb-32">
-        {vault.length > 0 && (
-          <div id="vault-section">
-            <MovieRow title="Your Personal Vault" movies={vault} onSelect={setActiveMovie} isSpecial={true} />
-          </div>
-        )}
-        <MovieRow title="The Global Zeitgeist" movies={data.trending} onSelect={setActiveMovie} />
-        <MovieRow title="Kinetic Cinema" movies={data.action} onSelect={setActiveMovie} />
-        <MovieRow title="Visions of Tomorrow" movies={data.scifi} onSelect={setActiveMovie} />
-      </section>
+      {/* --- DYNAMIC VIEWS RENDERER --- */}
+      <main className="min-h-screen">
+        {activeTab === 'home' && <HomeView featured={featured} data={data} vault={vault} onSelect={setActiveMovie} toggleVault={toggleVault} isFeaturedInVault={isFeaturedInVault} />}
+        {activeTab === 'explore' && <ExploreView data={data} onSelect={setActiveMovie} />}
+        {activeTab === 'search' && <SearchView data={data} onSelect={setActiveMovie} />}
+        {activeTab === 'vault' && <VaultView vault={vault} onSelect={setActiveMovie} />}
+      </main>
 
       {/* --- AI COMMAND PALETTE --- */}
       {aiModalOpen && (
@@ -444,7 +518,7 @@ export default function App() {
                 ].map((tag) => (
                   <button 
                     key={tag} 
-                    onClick={() => setPromptQuery(tag)} 
+                    onClick={() => { setPromptQuery(tag); setTimeout(() => setAiModalOpen(false), 500); }} 
                     className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/5 text-left transition-colors group"
                   >
                     <Search className="w-4 h-4 text-white/20 group-hover:text-white/60" />
