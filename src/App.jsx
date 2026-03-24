@@ -28,8 +28,10 @@ const getFirebaseInit = () => {
 const { app, auth, db, appId } = getFirebaseInit();
 
 // --- TMDB API CONFIGURATION ---
-// Insert your free TMDB API key here to fetch live data!
-const TMDB_API_KEY = ""; 
+// IMPORTANT FOR GITHUB/VERCEL: 
+// When deploying to Vercel with Vite, replace the empty string below with:
+// import.meta.env.VITE_TMDB_API_KEY
+const TMDB_API_KEY = "import.meta.env.VITE_TMDB_API_KEY"; 
 const BASE_URL = "https://api.themoviedb.org/3";
 const IMG_BASE = "https://image.tmdb.org/t/p/original";
 const IMG_BASE_SM = "https://image.tmdb.org/t/p/w500";
